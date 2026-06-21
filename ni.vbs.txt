@@ -1,0 +1,2 @@
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run "C:\ProgramData\anaconda3\pythonw.exe ""C:\jo\diff\python\ni.py""", 0, False

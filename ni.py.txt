@@ -1,0 +1,399 @@
+import os
+import random
+import tkinter as tk
+from tkinter import messagebox
+import pandas as pd
+
+
+class FlashcardApp:
+
+    def __init__(self, root, file_path):
+        self.root = root
+        self.file_path = file_path
+
+        # Configure the window
+        self.root.title("Flashcards")
+        self.root.attributes("-topmost", True)  # Keep window on top of all others
+
+        # Hide the title bar and window controls
+        self.root.overrideredirect(True)
+
+        # Allow the window to dynamically resize to fit content tightly
+        self.root.geometry("")  # Empty string forces auto-fit
+
+        # Transparency Settings (Modified: Default to Opaque)
+        self.transparency_enabled = False  
+        self.idle_opacity = 0.3  # 30% visible when mouse is away
+        self.active_opacity = 1.0  # 100% visible when mouse is hovering
+        self.root.attributes("-alpha", self.active_opacity)
+
+        # Theme Settings (True = Dark, False = Light)
+        self.dark_mode = True
+        self.themes = {
+            "dark": {
+                "bg": "#1e1e1e",  # Deep slate
+                "text_q": "#ffffff",
+                "text_a": "#2ecc71",
+                "btn_action": "#3498db",
+                "btn_action_active": "#2980b9",
+                "btn_utility": "#333333",
+                "btn_utility_text": "#ffffff",
+                "btn_close_bg": "#c0392b",
+                "btn_close_active": "#e74c3c",
+            },
+            "light": {
+                "bg": "#f0f4f8",  # Clean modern light blue-grey
+                "text_q": "#2c3e50",
+                "text_a": "#16a085",
+                "btn_action": "#3498db",
+                "btn_action_active": "#2980b9",
+                "btn_utility": "#e0e6ed",
+                "btn_utility_text": "#2c3e50",
+                "btn_close_bg": "#dc3545",
+                "btn_close_active": "#bb2d3b",
+            },
+        }
+
+        # Bind mouse hover events to handle transparency changes
+        self.root.bind("<Enter>", self.on_mouse_enter)
+        self.root.bind("<Leave>", self.on_mouse_leave)
+
+        # Bind mouse dragging events so you can move the borderless window
+        self.root.bind("<Button-1>", self.start_drag)
+        self.root.bind("<B1-Motion>", self.drag_window)
+
+        # Load data from Excel
+        self.words = self.load_excel_data()
+        self.current_index = -1
+
+        # --- UI Layout ---
+
+        # Top Control Bar (For configuration buttons + Close button)
+        self.top_bar = tk.Frame(root)
+        self.top_bar.pack(anchor="ne", padx=10, pady=(10, 0))
+
+        # Toggle Theme Button
+        self.btn_theme = tk.Button(
+            self.top_bar,
+            text="🌓",
+            font=("Helvetica", 10),
+            command=self.toggle_theme,
+            relief="flat",
+            borderwidth=0,
+            padx=5,
+            pady=2,
+        )
+        self.btn_theme.pack(side="left", padx=2)
+
+        # Toggle Transparency Button
+        self.btn_transparency = tk.Button(
+            self.top_bar,
+            text="🕶️",  # Set to sunglasses initially because it is opaque
+            font=("Helvetica", 10),
+            command=self.toggle_transparency,
+            relief="flat",
+            borderwidth=0,
+            padx=5,
+            pady=2,
+        )
+        self.btn_transparency.pack(side="left", padx=2)
+
+        # Close App Button (Relocated to Upper Right Control Bar)
+        self.btn_close = tk.Button(
+            self.top_bar,
+            text="✕",
+            font=("Helvetica", 10, "bold"),
+            command=self.root.destroy,
+            relief="flat",
+            borderwidth=0,
+            fg="white",
+            activeforeground="white",
+            padx=7,
+            pady=2,
+        )
+        self.btn_close.pack(side="left", padx=2)
+
+        # Column A Label (Always visible)
+        self.label_col1 = tk.Label(
+            root, font=("Helvetica", 24, "bold"), wraplength=400, justify="center"
+        )
+        self.label_col1.pack(pady=(15, 10), padx=30)
+
+        # Combined Column B & C Label (Hidden initially)
+        self.label_combined = tk.Label(
+            root, font=("Helvetica", 16, "normal"), wraplength=400, justify="center"
+        )
+        self.label_combined.pack(pady=(0, 15), padx=30)
+
+        # Frame to hold action buttons side by side
+        self.button_frame = tk.Frame(root)
+        self.button_frame.pack(pady=(5, 20), padx=20)
+
+        # "< Prev" Button
+        self.btn_prev = tk.Button(
+            self.button_frame,
+            text="< Prev",
+            font=("Helvetica", 11, "bold"),
+            command=self.prev_word,
+            bg="#495057",
+            activebackground="#343a40",
+            fg="#f8f9fa",
+            activeforeground="#ffffff",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=6,
+        )
+        self.btn_prev.pack(side="left", padx=4)
+
+        # "Next >" Button
+        self.btn_next = tk.Button(
+            self.button_frame,
+            text="Next >",
+            font=("Helvetica", 11, "bold"),
+            command=self.next_word,
+            bg="#198754",
+            activebackground="#146c43",
+            fg="#ffffff",
+            activeforeground="#ffffff",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=6,
+        )
+        self.btn_next.pack(side="left", padx=4)
+
+        # "Show Answer" Button
+        self.btn_show_answer = tk.Button(
+            self.button_frame,
+            text="Show Answer",
+            font=("Helvetica", 11, "bold"),
+            command=self.show_answer,
+            relief="flat",
+            borderwidth=0,
+            fg="#ffffff",
+            activeforeground="#ffffff",
+            padx=14,
+            pady=6,
+        )
+        self.btn_show_answer.pack(side="left", padx=4)
+
+        # "Got it! (Hide)" Button - Pack managed dynamically
+        self.btn_hide = tk.Button(
+            self.button_frame,
+            text="Got it!",
+            font=("Helvetica", 11, "bold"),
+            command=self.hide_and_schedule,
+            bg="#6f42c1",
+            activebackground="#59359a",
+            fg="#ffffff",
+            activeforeground="#ffffff",
+            relief="flat",
+            borderwidth=0,
+            padx=14,
+            pady=6,
+        )
+
+        # State tracking variable
+        self.showing_answer = False
+
+        # Initialize colors according to starting theme rules
+        self.update_theme_styles()
+
+        # Start by loading the first random word and positioning window
+        if self.words:
+            self.next_word()
+            self.center_left_window()
+
+    def center_left_window(self):
+        """Calculates screen dimensions and forces UI placement on the left center profile."""
+        self.root.update_idletasks()
+        window_width = self.root.winfo_width()
+        window_height = self.root.winfo_height()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Position X at roughly 12% of screen width, center vertically
+        x = int(screen_width * 0.12)
+        y = int((screen_height / 2) - (window_height / 2))
+        self.root.geometry(f"+{x}+{y}")
+
+    def start_drag(self, event):
+        self.x = event.x
+        self.y = event.y
+
+    def drag_window(self, event):
+        deltax = event.x - self.x
+        deltay = event.y - self.y
+        x = self.root.winfo_x() + deltax
+        y = self.root.winfo_y() + deltay
+        self.root.geometry(f"+{x}+{y}")
+
+    def on_mouse_enter(self, event):
+        if self.transparency_enabled:
+            self.root.attributes("-alpha", self.active_opacity)
+
+    def on_mouse_leave(self, event):
+        if self.transparency_enabled:
+            x, y = self.root.winfo_pointerxy()
+            widget = self.root.winfo_containing(x, y)
+            if widget is None:
+                self.root.attributes("-alpha", self.idle_opacity)
+
+    def toggle_transparency(self):
+        """Switches transparency processing on and off instantly."""
+        self.transparency_enabled = not self.transparency_enabled
+        if self.transparency_enabled:
+            self.root.attributes("-alpha", self.idle_opacity)
+            self.btn_transparency.config(text="👁️")
+        else:
+            self.root.attributes("-alpha", 1.0)
+            self.btn_transparency.config(text="🕶️")
+
+    def toggle_theme(self):
+        """Toggles backend theme values and triggers visual replacement refresh."""
+        self.dark_mode = not self.dark_mode
+        self.update_theme_styles()
+
+    def update_theme_styles(self):
+        """Applies configuration color arrays depending on theme choice."""
+        theme = self.themes["dark"] if self.dark_mode else self.themes["light"]
+
+        self.root.config(bg=theme["bg"])
+        self.top_bar.config(bg=theme["bg"])
+        self.button_frame.config(bg=theme["bg"])
+
+        self.label_col1.config(bg=theme["bg"], fg=theme["text_q"])
+        self.label_combined.config(bg=theme["bg"], fg=theme["text_a"])
+
+        # Update Show Answer colors
+        self.btn_show_answer.config(
+            bg=theme["btn_action"],
+            activebackground=theme["btn_action_active"],
+        )
+
+        # Update close button styling
+        self.btn_close.config(
+            bg=theme["btn_close_bg"],
+            activebackground=theme["btn_close_active"]
+        )
+
+        # Update utility buttons
+        for btn in [self.btn_theme, self.btn_transparency]:
+            btn.config(
+                bg=theme["btn_utility"],
+                fg=theme["btn_utility_text"],
+                activebackground=theme["btn_utility"],
+                activeforeground=theme["btn_utility_text"],
+            )
+
+    def load_excel_data(self):
+        if not os.path.exists(self.file_path):
+            messagebox.showerror(
+                "Error", f"Could not find Excel file at:\n{self.file_path}"
+            )
+            self.root.destroy()
+            return []
+
+        try:
+            df = pd.read_excel(self.file_path, skiprows=1, header=None)
+            if df.shape[1] < 3:
+                for i in range(df.shape[1], 3):
+                    df[i] = ""
+            df = df.fillna("")
+
+            data = []
+            for _, row in df.iterrows():
+                col_a = str(row[0]).strip()
+                col_b = str(row[1]).strip()
+                col_c = str(row[2]).strip()
+
+                if col_b and col_c:
+                    combined_answer = f"{col_b}  |  {col_c}"
+                else:
+                    combined_answer = col_b if col_b else col_c
+
+                data.append((col_a, combined_answer))
+
+            random.shuffle(data)
+            return data
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read Excel file:\n{e}")
+            self.root.destroy()
+            return []
+
+    def show_answer(self):
+        """Reveals the flashcard layout components answer field and adjusts buttons."""
+        if not self.words or self.showing_answer:
+            return
+
+        self.label_combined.config(text=self.words[self.current_index][1])
+        self.showing_answer = True
+
+        # Hide the Show Answer button completely on the second UI
+        self.btn_show_answer.pack_forget()
+
+        # Insert "Got it!" button dynamically, keeping formatting clean
+        self.btn_hide.pack(side="left", padx=4)
+
+    def hide_and_schedule(self):
+        """Hides the UI window instantly and schedules it to reappear after 20 seconds."""
+        self.root.withdraw()
+        self.root.after(20000, self.reappear_with_next)
+
+    def reappear_with_next(self):
+        """Brings the window back on screen and loads up the next word card."""
+        self.next_word()
+        self.root.deiconify()
+
+    def prev_word(self):
+        """Steps back to the previously displayed word and automatically reveals its answer."""
+        if not self.words or self.current_index <= 0:
+            messagebox.showinfo("Start of Session", "This is the first word!")
+            return
+
+        self.current_index -= 1
+
+        # Populate labels with previous card's info
+        self.label_col1.config(text=self.words[self.current_index][0])
+        self.label_combined.config(text=self.words[self.current_index][1])
+        self.showing_answer = True
+
+        # Adjust layout for the Answer profile
+        self.btn_show_answer.pack_forget()
+        self.btn_hide.pack_forget()
+        self.btn_hide.pack(side="left", padx=4)
+
+    def next_word(self):
+        """Advances to the next shuffled word profile card and resets layout buttons."""
+        if not self.words:
+            return
+
+        self.current_index += 1
+
+        if self.current_index >= len(self.words):
+            random.shuffle(self.words)
+            self.current_index = 0
+            messagebox.showinfo(
+                "Review Complete", "All words viewed! Reshuffling..."
+            )
+
+        # Reset text targets
+        self.label_col1.config(text=self.words[self.current_index][0])
+        self.label_combined.config(text="")
+
+        # Clear out "Got it!" button layout assignment
+        self.btn_hide.pack_forget()
+        self.showing_answer = False
+
+        # Bring back the "Show Answer" button for the new card view layout
+        self.btn_show_answer.pack_forget()
+        self.btn_show_answer.pack(side="left", padx=4)
+
+
+if __name__ == "__main__":
+    EXCEL_PATH = r"C:\jo\diff\python\words.xlsx"
+
+    root = tk.Tk()
+    app = FlashcardApp(root, EXCEL_PATH)
+    root.mainloop()
