@@ -9,7 +9,8 @@ var choice = app.popUpMenu(
     "yellow",
     "cyan",
     "green",
-    "blue"
+    "blue",
+    "delPages"
 );
 
 if (choice !== null) {
@@ -25,6 +26,7 @@ if (choice !== null) {
         case "cyan": cyan(); break;
         case "green": green(); break;
         case "blue": blue(); break;
+        case "delPages": delPages(); break;
         
     }
 }
@@ -168,5 +170,18 @@ function green() {
 function blue() {
     var col = ["RGB", 0, 0, 1], op = 0.30499267578125;
     selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+}
+//===============================================================================
+
+
+//===============================================================================
+function delPages() {
+    var d = {}, s = app.response("Pages to delete:");
+    s && s.split(",").forEach(function (p) {
+        var r = p.split("-");
+        for (var i = +r[0]; i <= +r[r.length - 1]; i++) d[i] = 1;
+    });
+    for (var i = this.numPages; i > 0; i--)
+        if (d[i]) { var e = i; while (d[i - 1]) i--; this.deletePages(i - 1, e - 1); }
 }
 //===============================================================================
