@@ -1,187 +1,226 @@
-var choice = app.popUpMenu(
-    "add_Highlight_thisPage",
-    "add_Cloud_thisPage",
-    "rev_textSize_thisAnnot",
-    "rev_textColor_thisAnnot",
-    "rev_fillColor_thisAnnot",
-    "saveAs_thisFile",
-    "magenta",
-    "yellow",
-    "cyan",
-    "green",
-    "blue",
-    "delPages"
-);
+var actions = [
 
+    //===========================================================================
+    { name: "add_Highlight_thisPage", run: function () {
+        // rev 2026-10-10-h
+        var vpage=this.pageNum;
+        var vbox=this.getPageBox("Crop",vpage);
+        this.addAnnot({
+            page:vpage,
+            type:"Square",
+            rect:(new Matrix2D).fromRotated(this,vpage).transform([10,10,vbox[2]-10,vbox[1]-10]),
+            strokeColor:["RGB",1,0,1],
+            fillColor:["RGB",1,0,1],
+            borderEffectStyle:"S",
+            author:"U355691",
+            opacity:0.30499267578125,
+            subject:"highlight"
+        });
+    }},
+    //===========================================================================
+
+
+
+    //===========================================================================
+    { name: "add_Cloud_thisPage", run: function () {
+        var vpage=this.pageNum;
+        vbox=this.getPageBox("Crop",vpage);
+        var vbei=app.response({cQuestion:"Border Effect Intensity:",cTitle:"Curve Size",cDefault:"0.5"});
+        if(vbei===null)exit;
+        vbei=Number(vbei);
+        var vwidth=app.response({cQuestion:"Border Width:",cTitle:"Thickness",cDefault:"0.5"});
+        if(vwidth===null)exit;
+        vwidth=Number(vwidth);
+        this.addAnnot({
+            page:vpage,
+            type:"Square",
+            rect:(new Matrix2D).fromRotated(this,vpage).transform([10,10,vbox[2]-10,vbox[1]-10]),
+            strokeColor:color.red,
+            fillColor:color.transparent,
+            width:vwidth,
+            borderEffectStyle:"C",
+            borderEffectIntensity:vbei,
+            author:"U355691",
+            opacity:1,
+            subject:"cloud"
+        });
+    }},
+    //===========================================================================
+
+    { name: "selAnnot_props", run: function () {
+        var t = (selectedAnnots || []).map(function (a) {
+            var p = a.getProps(), s = [];
+            for (var k in p) s.push(k + ": " + p[k]);
+            return s.sort().join("\r");
+        }).join("\r\r");
+        t && app.execDialog({
+            initialize: function (d) { d.load({ txt1: t }); },
+            description: { name: "Props", elements: [{ type: "view", elements: [
+                { type: "edit_text", item_id: "txt1", multiline: true, readonly: true, font: "palette", width: 600, height: 400 },
+                { type: "ok" }
+            ] }] }
+        });
+    }},
+
+
+
+    { name: "show_pageProps", run: function () {
+        var n = this.pageNum;
+        var box = this.getPageBox("Crop", n);
+        var w = Math.abs(box[2] - box[0]) / 72;
+        var h = Math.abs(box[3] - box[1]) / 72;
+
+        var text = [
+            "filename: " + this.documentFileName,
+            "location: " + this.path,
+            "filesize: " + (this.filesize / 1024).toFixed(1) + " KB",
+            "page size: " + w.toFixed(2) + " x " + h.toFixed(2) + " in",
+            ""
+        ];
+
+        ["Art", "Bleed", "Crop", "Media", "Trim"].forEach(function (b) {
+            text.push(b + "Box: " + this.getPageBox(b, n));
+        }, this);
+
+        text.push(
+            "page: " + (n + 1) + "/" + this.numPages,
+            "label: " + this.getPageLabel(n),
+            "rotation: " + this.getPageRotation(n),
+            "words: " + this.getPageNumWords(n),
+            "annots: " + (this.getAnnots({ nPage: n }) || []).length
+        );
+
+        app.execDialog({
+            initialize: function (d) { d.load({ txt1: text.join("\r") }); },
+            description: {
+                name: "Page props",
+                elements: [{ type: "view", elements: [
+                    { type: "edit_text", item_id: "txt1", multiline: true, readonly: true, width: 400, height: 260 },
+                    { type: "ok" }
+                ] }]
+            }
+        });
+    }},
+
+    //===========================================================================
+    { name: "rev_textSize_thisAnnot", run: function () {
+        var s = Number(app.response("Input size:", "", String(selectedAnnots[0].getProps().richContents[0].textSize)));
+        if (s > 0) {
+            selectedAnnots.forEach(function (a) {
+                var p = a.getProps();
+                p.richContents.forEach(function (r) { r.textSize = s; });
+                a.setProps(p);
+            });
+        }
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "rev_textColor_thisAnnot", run: function () {
+        var c = app.response("Color (name or r,g,b):", "", "red");
+        if (c) {
+            var col = color[c.trim().toLowerCase()] || ["RGB"].concat(c.split(",").map(Number));
+            selectedAnnots.forEach(function (a) {
+                var p = a.getProps();
+                p.richContents.forEach(function (r) { r.textColor = col; });
+                a.setProps(p);
+            });
+        }
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "rev_fillColor_thisAnnot", run: function () {
+        var c = app.response("Fill color (name or r,g,b):", "", "red");
+        var r = c && app.response("Opacity (0-1):", "", "0.30499267578125"), o = Number(r);
+        if (c && r !== null && o >= 0 && o <= 1) {
+            var col = color[c.trim().toLowerCase()] || ["RGB"].concat(c.split(",").map(Number));
+            selectedAnnots.forEach(function (a) {
+                a.setProps({ fillColor: col, opacity: o });
+            });
+        }
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "saveAs_thisFile", run: function () {
+        var n = app.popUpMenu("_n1", "_o1", "_n2", "_o2", "Custom...");
+        var f = n === "Custom..." ? app.response("Filename:", "Save As", "_n1") : n;
+
+        if (f) {
+            this.saveAs("/c/jo/diff/" + f + ".pdf");
+            app.alert(f + ".pdf Saved!", 3);
+        }
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "magenta", run: function () {
+        var col = ["RGB", 1, 0, 1], op = 0.30499267578125;
+        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "yellow", run: function () {
+        var col = ["RGB", 1, 1, 0], op = 0.30499267578125;
+        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "cyan", run: function () {
+        var col = ["RGB", 0, 1, 1], op = 0.30499267578125;
+        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "green", run: function () {
+        var col = ["RGB", 0, 1, 0], op = 0.30499267578125;
+        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "blue", run: function () {
+        var col = ["RGB", 0, 0, 1], op = 0.30499267578125;
+        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+    }},
+    //===========================================================================
+
+
+    //===========================================================================
+    { name: "delPages", run: function () {
+        var d = {}, s = app.response("Pages to delete:");
+        s && s.split(",").forEach(function (p) {
+            var r = p.split("-");
+            for (var i = +r[0]; i <= +r[r.length - 1]; i++) d[i] = 1;
+        });
+        for (var i = this.numPages; i > 0; i--)
+            if (d[i]) { var e = i; while (d[i - 1]) i--; this.deletePages(i - 1, e - 1); }
+    }}
+    //===========================================================================
+
+];
+var labels = [];
+for (var i = 0; i < actions.length; i++) {
+    labels.push(actions[i].name);
+}
+var choice = app.popUpMenu.apply(app, labels);
 if (choice !== null) {
-    switch (choice) {
-        case "add_Highlight_thisPage": add_Highlight_thisPage(); break;
-        case "add_Cloud_thisPage": add_Cloud_thisPage(); break;
-        case "rev_textSize_thisAnnot": rev_textSize_thisAnnot(); break;
-        case "rev_textColor_thisAnnot": rev_textColor_thisAnnot(); break;
-        case "rev_fillColor_thisAnnot": rev_fillColor_thisAnnot(); break;
-        case "saveAs_thisFile": saveAs_thisFile(); break;
-        case "magenta": magenta(); break;
-        case "yellow": yellow(); break;
-        case "cyan": cyan(); break;
-        case "green": green(); break;
-        case "blue": blue(); break;
-        case "delPages": delPages(); break;
-        
+    for (var j = 0; j < actions.length; j++) {
+        if (actions[j].name === choice) {
+            actions[j].run.call(this);
+            break;
+        }
     }
 }
-
-//===============================================================================
-function add_Highlight_thisPage() {
-    // rev 2026-10-10-h
-    var vpage=this.pageNum;
-    var vbox=this.getPageBox("Crop",vpage);
-    this.addAnnot({
-        page:vpage,
-        type:"Square",
-        rect:(new Matrix2D).fromRotated(this,vpage).transform([10,10,vbox[2]-10,vbox[1]-10]),
-        strokeColor:["RGB",1,0,1],
-        fillColor:["RGB",1,0,1],
-        borderEffectStyle:"S",
-        author:"U355691",
-        opacity:0.30499267578125,
-        subject:"highlight"
-    });
-}
-//===============================================================================
-
-
-//===============================================================================
-function add_Cloud_thisPage() {
-    var vpage=this.pageNum;
-    vbox=this.getPageBox("Crop",vpage);
-    var vbei=app.response({cQuestion:"Border Effect Intensity:",cTitle:"Curve Size",cDefault:"0.5"});
-    if(vbei===null)exit;
-    vbei=Number(vbei);
-    var vwidth=app.response({cQuestion:"Border Width:",cTitle:"Thickness",cDefault:"0.5"});
-    if(vwidth===null)exit;
-    vwidth=Number(vwidth);
-    this.addAnnot({
-        page:vpage,
-        type:"Square",
-        rect:(new Matrix2D).fromRotated(this,vpage).transform([10,10,vbox[2]-10,vbox[1]-10]),
-        strokeColor:color.red,
-        fillColor:color.transparent,
-        width:vwidth,
-        borderEffectStyle:"C",
-        borderEffectIntensity:vbei,
-        author:"U355691",
-        opacity:1,
-        subject:"cloud"
-    });
-}
-//===============================================================================
-
-
-//===============================================================================
-function rev_textSize_thisAnnot() {
-    var s = Number(app.response("Input size:", "", String(selectedAnnots[0].getProps().richContents[0].textSize)));
-    if (s > 0) {
-        selectedAnnots.forEach(function (a) {
-            var p = a.getProps();
-            p.richContents.forEach(function (r) { r.textSize = s; });
-            a.setProps(p);
-        });
-    }
-}
-//===============================================================================
-
-
-//===============================================================================
-function rev_textColor_thisAnnot() {
-    var c = app.response("Color (name or r,g,b):", "", "red");
-    if (c) {
-        var col = color[c.trim().toLowerCase()] || ["RGB"].concat(c.split(",").map(Number));
-        selectedAnnots.forEach(function (a) {
-            var p = a.getProps();
-            p.richContents.forEach(function (r) { r.textColor = col; });
-            a.setProps(p);
-        });
-    }
-}
-//===============================================================================
-
-
-//===============================================================================
-function rev_fillColor_thisAnnot() {
-    var c = app.response("Fill color (name or r,g,b):", "", "red");
-    var r = c && app.response("Opacity (0-1):", "", "0.30499267578125"), o = Number(r);
-    if (c && r !== null && o >= 0 && o <= 1) {
-        var col = color[c.trim().toLowerCase()] || ["RGB"].concat(c.split(",").map(Number));
-        selectedAnnots.forEach(function (a) {
-            a.setProps({ fillColor: col, opacity: o });
-        });
-    }
-}
-//===============================================================================
-
-
-//===============================================================================
-function saveAs_thisFile() {
-    var n = app.popUpMenu("_n1", "_o1", "_n2", "_o2", "Custom...");
-    var f = n === "Custom..." ? app.response("Filename:", "Save As", "_n1") : n;
-
-    if (f) {
-        this.saveAs("/c/jo/diff/" + f + ".pdf");
-        app.alert(f + ".pdf Saved!", 3);
-    }
-}
-//===============================================================================
-
-
-//===============================================================================
-function magenta() {
-    var col = ["RGB", 1, 0, 1], op = 0.30499267578125;
-    selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
-}
-//===============================================================================
-
-
-//===============================================================================
-function yellow() {
-    var col = ["RGB", 1, 1, 0], op = 0.30499267578125;
-    selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
-}
-//===============================================================================
-
-
-//===============================================================================
-function cyan() {
-    var col = ["RGB", 0, 1, 1], op = 0.30499267578125;
-    selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
-}
-//===============================================================================
-
-
-//===============================================================================
-function green() {
-    var col = ["RGB", 0, 1, 0], op = 0.30499267578125;
-    selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
-}
-//===============================================================================
-
-
-//===============================================================================
-function blue() {
-    var col = ["RGB", 0, 0, 1], op = 0.30499267578125;
-    selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
-}
-//===============================================================================
-
-
-//===============================================================================
-function delPages() {
-    var d = {}, s = app.response("Pages to delete:");
-    s && s.split(",").forEach(function (p) {
-        var r = p.split("-");
-        for (var i = +r[0]; i <= +r[r.length - 1]; i++) d[i] = 1;
-    });
-    for (var i = this.numPages; i > 0; i--)
-        if (d[i]) { var e = i; while (d[i - 1]) i--; this.deletePages(i - 1, e - 1); }
-}
-//===============================================================================
