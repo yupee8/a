@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="x-ua-compatible" content="ie=9">
+<title>Task Kill Launcher</title>
+<hta:application caption="no" border="none" scroll="no" maximizebutton="no" singleinstance="yes">
+<style>
+html,body{height:100%}
+body{margin:0;font:14px Segoe UI,Arial;background:#1e1e1e;color:#eee;overflow:hidden;border:1px solid #444;box-sizing:border-box}
+#bar{height:32px;background:#111;cursor:move;position:relative;line-height:32px;padding-left:12px;font-size:13px;color:#aaa}
+#bar div{position:absolute;top:0;right:0;width:46px;text-align:center;font-size:14px;cursor:default;color:#ccc}
+#bar div:hover{background:#c0392b;color:#fff}
+input{width:100%;box-sizing:border-box;font-size:16px;padding:6px;background:#2b2b2b;color:#fff;border:1px solid #555}
+#msg{margin-top:12px;font:13px/1.5 Consolas;height:60px;overflow-y:auto}
+#grip{position:fixed;right:2px;bottom:0;width:16px;height:16px;line-height:16px;font-size:14px;color:#666;cursor:se-resize;text-align:right;z-index:10}
+#grip:hover{color:#aaa}
+</style>
+<script language="JScript">
+resizeTo(320,240);
+
+//===============================================================================
+// ADD / DELETE COMMANDS HERE.
+// One command  -> keyword: "command",
+// Many commands -> keyword: [ "command 1", "command 2", ... ],  (one per line)
+var tasks = {
+    explorer: "taskkill /f /im explorer.exe",
+    chrome:   "taskkill /f /im chrome.exe",
+    edge:     "taskkill /f /im msedge.exe",
+    firefox:  "taskkill /f /im firefox.exe",
+    notepad:  "taskkill /f /im notepad.exe",
+    excel:    "taskkill /f /im excel.exe",
+    word:     "taskkill /f /im winword.exe",
+    outlook:  "taskkill /f /im outlook.exe",
+    teams:    "taskkill /f /im ms-teams.exe",
+    onedrive: "taskkill /f /im onedrive.exe",
+    powerpnt: "taskkill /f /im powerpnt.exe",
+
+    acrobat: [
+        "taskkill /f /im acrobat.exe",
+        "taskkill /f /im acrotray.exe",
+        "taskkill /f /im AcroCEF.exe",
+        "taskkill /f /im AdobeCollabSync.exe"
+    ]
+};
+
+// Keywords that "all" should NOT kill. Example: { explorer: 1, onedrive: 1 }
+var skipInAll = { };
+//===============================================================================
+
+function fit(){msg.style.height=Math.max(20,document.documentElement.clientHeight-msg.getBoundingClientRect().top-17)+"px"}
+
+function L(a,t,c){return '<span style="color:'+c+'">'+a+": "+t+"</span>"}
+
+function run(k){
+    var c=[],o=[],p=[],n,i,x,r,s=new ActiveXObject("WScript.Shell");
+    if(k!="all"&&!tasks.hasOwnProperty(k)){   // not an exact keyword: try partial match
+        if("all".indexOf(k)>=0)p.push("all");
+        for(n in tasks)if(n.indexOf(k)>=0)p.push(n);
+        if(p.length==1&&p[0]!="all")k=p[0];
+        else if(p.length)return msg.innerHTML=L("Did you mean",p.join(", "),"#f5c542");
+    }
+    if(k=="all"){for(n in tasks)if(!skipInAll[n])c=c.concat(tasks[n])}
+    else if(tasks.hasOwnProperty(k))c=c.concat(tasks[k]);
+    else return msg.innerHTML=L("Unknown",k,"#ff6b6b");
+    for(i=0;i<c.length;i++){
+        x=c[i];
+        r=s.Run("cmd /c "+x,0,true);
+        o.push(r?r==128?L("Not running",x,"#f5c542"):L("Error "+r,x,"#ff6b6b"):L("OK",x,"#7bd88f"))
+    }
+    msg.innerHTML=o.join("<br>")
+}
+
+// Live preview while typing: lists the matching keywords; when one is left, shows what Enter will run
+var lv="";
+function pv(){
+    var v=kw.value.replace(/^\s+|\s+$/g,"").toLowerCase(),p=[],c=[],n,i,h;
+    if(v==lv)return;
+    lv=v;
+    if(!v){msg.innerHTML="";return}
+    if(v=="all"||tasks.hasOwnProperty(v))p.push(v);
+    else{
+        if("all".indexOf(v)>=0)p.push("all");
+        for(n in tasks)if(n.indexOf(v)>=0)p.push(n);
+    }
+    if(!p.length)h=L("No match",v,"#ff6b6b");
+    else if(p.length>1||p[0]=="all"&&v!="all")h=L("Matches",p.join(", "),"#f5c542");
+    else{
+        if(v=="all"){for(n in tasks)if(!skipInAll[n])c.push(n);c=[c.join(", ")]}
+        else c=[].concat(tasks[p[0]]);
+        h=L("Enter runs",p[0],"#7bd88f");
+        for(i=0;i<c.length;i++)h+='<br><span style="color:#888">'+c[i]+"</span>"
+    }
+    msg.innerHTML=h
+}
+
+// Enter: run typed keyword, or open the pop-out if the box is empty
+function go(){var k=kw.value.replace(/^\s+|\s+$/g,"").toLowerCase();kw.value="";lv="";if(k)run(k);else sm()}
+
+function key(){var c=event.keyCode;if(c==13)go();else if(c==27)window.close();else return true;return false}
+
+//===============================================================================
+// Pop-out menu (modeless dialog) with type-to-filter
+var mw=null,mi=-1,mn=[],an=[],fv="";
+
+function mo(){try{return mw&&!mw.closed}catch(e){return 0}}
+function g(i){return mw.document.getElementById(i)}
+function fc(){mw.focus();g("f").focus()}
+
+function sm(){
+    if(mo()){fc();return}
+    var lh,k,d;
+    an=["all"];for(k in tasks)an.push(k);
+    fv="";lh=Math.min(338,an.length*29);
+    mw=showModelessDialog("about:blank",window,"dialogWidth:220px;dialogHeight:"+(lh+82)+"px;dialogLeft:"+(screenLeft+20)+"px;dialogTop:"+(screenTop+100)+"px;scroll:0;status:0;resizable:0;help:0");
+    d=mw.document;d.open();
+    d.write('<style>body{margin:0;background:#2b2b2b;color:#eee;font:14px Segoe UI,Arial;overflow:hidden}#f{width:100%;height:30px;box-sizing:border-box;border:0;border-bottom:1px solid #555;padding:4px 14px;background:#1e1e1e;color:#fff;font:14px Segoe UI,Arial}#l{overflow-y:auto;height:'+lh+'px}.item{padding:6px 14px;cursor:default}.sel{background:#c0392b;color:#fff}</style><body onkeydown="return dialogArguments.mk(event)"><input id=f autocomplete=off onkeyup="dialogArguments.ft(this.value)"><div id=l></div>');
+    d.close();rd("");fc()
+}
+
+// rebuild the list with the entries that contain v
+function rd(v){
+    var h="",i;
+    mn=[];for(i=0;i<an.length;i++)if(an[i].indexOf(v)>=0)mn.push(an[i]);
+    for(i=0;i<mn.length;i++)h+='<div class=item id=mi'+i+' onmouseover="dialogArguments.hl('+i+')" onclick="dialogArguments.pk('+i+')">'+mn[i]+'</div>';
+    g("l").innerHTML=h||'<div class=item>(no match)</div>';
+    mi=-1;hl(0,1)
+}
+
+// called on every keyup in the filter box; only rebuilds when the text changed
+function ft(v){v=v.replace(/^\s+|\s+$/g,"").toLowerCase();if(v!=fv){fv=v;rd(v)}}
+
+function cm(f){if(mo()){try{mw.close()}catch(e){}}mw=null;mi=-1;if(f){window.focus();kw.focus()}}
+
+function hl(i,s){
+    if(!mo())return;
+    var e=g("mi"+mi);if(e)e.className="item";
+    mi=i;e=g("mi"+i);
+    if(e){e.className="item sel";if(s)e.scrollIntoView(false)}
+}
+
+function pk(i){var n=mn[i];cm(1);run(n)}
+
+function mk(e){
+    var c=e.keyCode,n=mn.length;
+    if(c==27)cm(1);
+    else if(c==13){if(n)pk(mi)}
+    else if(c==40||c==38){if(n)hl((mi+n+(c==40?1:-1))%n,1)}
+    else return true;
+    return false
+}
+
+//===============================================================================
+// Drag by the bar (ds(0)) / resize by the grip (ds(1))
+var m=0,X,Y,W,H,E;
+
+function ds(r){
+    m=r+1;X=event.screenX;Y=event.screenY;
+    W=document.documentElement.clientWidth;H=document.documentElement.clientHeight;
+    (E=r?grip:bar).setCapture()
+}
+function dm(){
+    var a=event.screenX,b=event.screenY;
+    if(m==1){moveBy(a-X,b-Y);X=a;Y=b}
+    else if(m==2)resizeTo(Math.max(260,W+a-X),Math.max(160,H+b-Y))
+}
+function de(){if(m){m=0;E.releaseCapture()}}
+</script>
+</head>
+<body onload="fit();kw.focus()" onresize="fit()" onkeydown="return key()" onunload="cm()" onmousemove="dm()" onmouseup="de()">
+<div id="bar" onmousedown="ds(0)">Task Kill Launcher<div onmousedown="event.cancelBubble=true" onclick="window.close()">&#10005;</div></div>
+<div style="padding:16px"><input id="kw" autocomplete="off" onkeyup="pv()"><div id="msg"></div></div>
+<div id="grip" onmousedown="ds(1)">&#9698;</div>
+</body>
+</html>
