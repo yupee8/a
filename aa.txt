@@ -62,7 +62,51 @@ var actions = [
         });
     }},
 
+    { name: "extComments", run: function () {
+        this.syncAnnotScan();
+        var t = (this.getAnnots() || []).map(function (a) {
+            return a.author + "_" + String(a.contents).replace(/[\r\n]+/g, " ") + "_" + (a.page + 1);
+        }).join("\r");
+        t && app.execDialog({
+            initialize: function (d) { d.load({ txt1: t }); },
+            description: { name: "Comments", elements: [{ type: "view", elements: [
+                { type: "edit_text", item_id: "txt1", multiline: true, readonly: true, font: "palette", width: 600, height: 400 },
+                { type: "ok" }
+            ] }] }
+        });
+    }},
 
+    { name: "sumComments", run: function () {
+        this.syncAnnotScan();
+        var c = {}, s = [], k;
+        (this.getAnnots() || []).forEach(function (a) { c[a.author] = (c[a.author] || 0) + 1; });
+        for (k in c) s.push(k + "_" + c[k]);
+        var t = s.sort().join("\r");
+        t && app.execDialog({
+            initialize: function (d) { d.load({ txt1: t }); },
+            description: { name: "Summary", elements: [{ type: "view", elements: [
+                { type: "edit_text", item_id: "txt1", multiline: true, readonly: true, font: "palette", width: 600, height: 400 },
+                { type: "ok" }
+            ] }] }
+        });
+    }},
+
+
+    { name: "hidComments", run: function () {
+        this.syncAnnotScan();
+        var t = (this.getAnnots() || []).filter(function (a) {
+            return a.hidden || a.noView;
+        }).map(function (a) {
+            return a.author + "_" + (a.page + 1) + "_" + String(a.contents).replace(/[\r\n]+/g, " ");
+        }).join("\r");
+        t && app.execDialog({
+            initialize: function (d) { d.load({ txt1: t }); },
+            description: { name: "Hidden comments", elements: [{ type: "view", elements: [
+                { type: "edit_text", item_id: "txt1", multiline: true, readonly: true, font: "palette", width: 600, height: 400 },
+                { type: "ok" }
+            ] }] }
+        });
+    }},
 
     { name: "show_pageProps", run: function () {
         var n = this.pageNum;
@@ -158,36 +202,72 @@ var actions = [
     //===========================================================================
 
 
-    //===========================================================================
+    { name: "-" },
+
+  
+    
     { name: "magenta", run: function () {
-        var col = ["RGB", 1, 0, 1], op = 0.30499267578125;
-        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+        selectedAnnots.forEach(function (p) {
+            p.author = "magenta";
+            p.subject = "magenta";
+            p.strokeColor = ["RGB", 1, 0, 1];
+            p.fillColor = ["RGB", 1, 0, 1];
+            p.opacity = 0.30499267578125;
+            //p.richContents = p.richContents.map(function (r) {
+                //r.textSize = 12;
+                //r.textColor = color.red;
+                //return r;
+            //});
+        });
     }},
-    //===========================================================================
 
-
-    //===========================================================================
     { name: "yellow", run: function () {
-        var col = ["RGB", 1, 1, 0], op = 0.30499267578125;
-        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+        selectedAnnots.forEach(function (p) {
+            p.author = "yellow";
+            p.subject = "yellow";
+            p.strokeColor = ["RGB", 1, 1, 0];
+            p.fillColor = ["RGB", 1, 1, 0];
+            p.opacity = 0.30499267578125;
+            p.richContents = p.richContents.map(function (r) {
+                //r.textSize = 12;
+                //r.textColor = color.red;
+                return r;
+            });
+        });
     }},
-    //===========================================================================
 
 
-    //===========================================================================
     { name: "cyan", run: function () {
-        var col = ["RGB", 0, 1, 1], op = 0.30499267578125;
-        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+        selectedAnnots.forEach(function (p) {
+            p.author = "cyan";
+            p.subject = "cyan";
+            p.strokeColor = ["RGB", 0, 1, 1];
+            p.fillColor = ["RGB", 0, 1, 1];
+            p.opacity = 0.30499267578125;
+            p.richContents = p.richContents.map(function (r) {
+                //r.textSize = 12;
+                //r.textColor = color.red;
+                return r;
+            });
+        });
     }},
-    //===========================================================================
 
-
-    //===========================================================================
     { name: "green", run: function () {
-        var col = ["RGB", 0, 1, 0], op = 0.30499267578125;
-        selectedAnnots.forEach(function (a) { a.setProps({ fillColor: col, opacity: op }); });
+        selectedAnnots.forEach(function (p) {
+            p.author = "green";
+            p.subject = "green";
+            p.strokeColor = ["RGB", 0, 1, 0];
+            p.fillColor = ["RGB", 0, 1, 0];
+            p.opacity = 0.30499267578125;
+            p.richContents = p.richContents.map(function (r) {
+                //r.textSize = 12;
+                //r.textColor = color.red;
+                return r;
+            });
+        });
     }},
-    //===========================================================================
+
+
 
 
     //===========================================================================
@@ -207,8 +287,54 @@ var actions = [
         });
         for (var i = this.numPages; i > 0; i--)
             if (d[i]) { var e = i; while (d[i - 1]) i--; this.deletePages(i - 1, e - 1); }
-    }}
+    }},
     //===========================================================================
+
+    { name: "extPages", run: function () {
+        var d = {}, s = app.response("Pages to extract:");
+        if (!s) return;
+        s.split(",").forEach(function (p) {
+            var r = p.split("-");
+            for (var i = +r[0]; i <= +r[r.length - 1]; i++) d[i] = 1;
+        });
+        var n = this.extractPages(0, this.numPages - 1);
+        for (var i = n.numPages; i > 0; i--)
+            if (!d[i]) { var e = i; while (i > 1 && !d[i - 1]) i--; n.deletePages(i - 1, e - 1); }
+    }},
+
+
+    { name: "movPages", run: function () {
+        var s = app.response("Pages to move (5-6,B3 = before 3, 5-6,A3 = after 3):");
+        if (!s) return;
+        var t = s.split(","), x = t.pop(), T = +x.slice(1), d = {}, c = [], i, j, k;
+        t.forEach(function (p) {
+            var r = p.split("-");
+            for (var i = +r[0]; i <= +r[r.length - 1]; i++) d[i] = 1;
+        });
+        for (i = 1; i <= this.numPages; i++) c.push(i);
+        var o = c.filter(function (p) { return !d[p]; }),
+            m = c.filter(function (p) { return d[p]; });
+        j = o.indexOf(T);
+        if (j < 0) return;
+        o.splice.apply(o, [j + /^a/i.test(x), 0].concat(m));
+        for (k = 0; k < o.length; k++) {
+            j = c.indexOf(o[k]);
+            j > k && this.movePage(j, k - 1);
+            c.splice(k, 0, c.splice(j, 1)[0]);
+        }
+    }},
+
+
+    { name: "clrAnnots", run: function () {
+        this.syncAnnotScan();
+        (this.getAnnots() || []).forEach(function (a) { a.contents = ""; });
+    }},
+
+    { name: "authFromContents", run: function () {
+        this.syncAnnotScan();
+        (this.getAnnots() || []).forEach(function (a) { a.author = a.contents; });
+    }}
+
 
 ];
 var labels = [];
