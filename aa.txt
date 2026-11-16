@@ -26,10 +26,10 @@ var actions = [
 { name: "add_Cloud_thisPage", run: function () {
     var vpage=this.pageNum;
     vbox=this.getPageBox("Crop",vpage);
-    var vbei=app.response({cQuestion:"Border Effect Intensity:",cTitle:"Curve Size",cDefault:"0.5"});
+    var vbei=app.response({cQuestion:"Border Effect Intensity:",cTitle:"Curve Size",cDefault:"0.75"});
     if(vbei===null)exit;
     vbei=Number(vbei);
-    var vwidth=app.response({cQuestion:"Border Width:",cTitle:"Thickness",cDefault:"0.5"});
+    var vwidth=app.response({cQuestion:"Border Width:",cTitle:"Thickness",cDefault:"0.75"});
     if(vwidth===null)exit;
     vwidth=Number(vwidth);
     this.addAnnot({
@@ -206,11 +206,10 @@ var actions = [
 
 { name: "-" },
 
-
-
 { name: "magenta", run: function () {
-    selectedAnnots.forEach(function (p) {
-        p.author = "magenta";
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
         p.subject = "magenta";
         p.strokeColor = ["RGB", 1, 0, 1];
         p.fillColor = ["RGB", 1, 0, 1];
@@ -222,81 +221,114 @@ var actions = [
             //r.textColor = color.red;
             //return r;
         //});
-    });
+    }
+}},
+
+
+{ name: "destroyMagenta", run: function () {
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        if (p.author == "U355691" &&
+            p.subject == "magenta" &&
+            color.equal(p.strokeColor, ["RGB", 1, 0, 1]) &&
+            color.equal(p.fillColor, ["RGB", 1, 0, 1]) &&
+            p.opacity == 0.30499267578125 &&
+            p.width == 0 &&
+            p.borderEffectStyle == "S")
+            p.destroy();
+    }
+}},
+
+
+{ name: "destroybySubject", run: function () {
+  var s = app.response("Subject of annotations to destroy:");
+  if (s) (this.getAnnots() || []).forEach(function (a) { if (a.subject == s) a.destroy(); });
+}}
+
+{ name: "destroyAllAnnots", run: function () {
+    var annots = this.getAnnots() || [];
+    for (var i = 0; i < annots.length; i++)
+        annots[i].destroy();
 }},
 
 { name: "yellow", run: function () {
-    selectedAnnots.forEach(function (p) {
-        p.author = "yellow";
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
         p.subject = "yellow";
         p.strokeColor = ["RGB", 1, 1, 0];
         p.fillColor = ["RGB", 1, 1, 0];
         p.opacity = 0.30499267578125;
         p.width = 0;
         p.borderEffectStyle = "S";
-        p.richContents = p.richContents.map(function (r) {
+        //p.richContents = p.richContents.map(function (r) {
             //r.textSize = 12;
             //r.textColor = color.red;
-            return r;
-        });
-    });
+            //return r;
+        //});
+    }
 }},
 
-
 { name: "cyan", run: function () {
-    selectedAnnots.forEach(function (p) {
-        p.author = "cyan";
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
         p.subject = "cyan";
         p.strokeColor = ["RGB", 0, 1, 1];
         p.fillColor = ["RGB", 0, 1, 1];
         p.opacity = 0.30499267578125;
         p.width = 0;
         p.borderEffectStyle = "S";
-        p.richContents = p.richContents.map(function (r) {
+        //p.richContents = p.richContents.map(function (r) {
             //r.textSize = 12;
             //r.textColor = color.red;
-            return r;
-        });
-    });
+            //return r;
+        //});
+    }
 }},
 
 { name: "green", run: function () {
-    selectedAnnots.forEach(function (p) {
-        p.author = "green";
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
         p.subject = "green";
         p.strokeColor = ["RGB", 0, 1, 0];
         p.fillColor = ["RGB", 0, 1, 0];
         p.opacity = 0.30499267578125;
         p.width = 0;
         p.borderEffectStyle = "S";
-        p.richContents = p.richContents.map(function (r) {
+        //p.richContents = p.richContents.map(function (r) {
             //r.textSize = 12;
             //r.textColor = color.red;
-            return r;
-        });
-    });
+            //return r;
+        //});
+    }
 }},
 
 
 { name: "blue", run: function () {
-    selectedAnnots.forEach(function (p) {
-        p.author = "blue";
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
         p.subject = "blue";
         p.strokeColor = ["RGB", 0, 0, 1];
         p.fillColor = ["RGB", 0, 0, 1];
         p.opacity = 0.30499267578125;
         p.width = 0;
         p.borderEffectStyle = "S";
-        p.richContents = p.richContents.map(function (r) {
+        //p.richContents = p.richContents.map(function (r) {
             //r.textSize = 12;
             //r.textColor = color.red;
-            return r;
-        });
-    });
+            //return r;
+        //});
+    }
 }},
 
+
+
 { name: "txtBox", run: function () {
-    selectedAnnots.forEach(function (p) {
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
         p.author = "U355691";
         p.subject = "Text Box";
         p.strokeColor = ["RGB", 1, 0, 0];
@@ -309,11 +341,27 @@ var actions = [
             r.textColor = color.red;
             return r;
         });
-    });
+    }
 }},
 
 
-
+{ name: "inv", run: function () {
+    for (var i = 0; i < selectedAnnots.length; i++) {
+        var p = selectedAnnots[i];
+        p.author = "U355691";
+        p.subject = "inv";
+        p.strokeColor = ["RGB", 0, 0, 1];
+        p.fillColor = ["RGB", 1,0.666656494140625,0.75];
+        p.opacity = 1;
+        p.width = 0;
+        p.borderEffectStyle = "S";
+        p.richContents = p.richContents.map(function (r) {
+            r.textSize = 2;
+            r.textColor = color.blue;
+            return r;
+        });
+    }
+}},
 
 { name: "flattenbyAuthor", run: function () {
   var author = app.response("Flatten comments by which author?", "Flatten by Author", "flatten");
