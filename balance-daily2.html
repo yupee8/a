@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily consolidated balance</title>
+<style>
+:root{--bg:#ffffff;--panel:#f0f3fa;--fg:#131722;--mut:#787b86;--grid:#e0e3eb;--up:#089981;--down:#f23645;--acc:#2962ff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131722;--panel:#1e222d;--fg:#d1d4dc;--mut:#787b86;--grid:#2a2e39;--up:#26a69a;--down:#ef5350;--acc:#2962ff}}
+:root[data-theme="dark"]{--bg:#131722;--panel:#1e222d;--fg:#d1d4dc;--mut:#787b86;--grid:#2a2e39;--up:#26a69a;--down:#ef5350;--acc:#2962ff}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:13px/1.4 "Trebuchet MS",system-ui,sans-serif}
+[hidden]{display:none!important}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--grid)}
+.sp{flex:1}
+button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--grid);border-radius:4px;padding:5px 10px;cursor:pointer}
+button:hover{background:var(--panel)}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+label{color:var(--mut)}
+#acc{display:flex;flex-wrap:wrap;gap:4px 14px}
+#acc label{color:var(--fg);cursor:pointer}
+input[type=number]{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--grid);border-radius:4px;padding:4px 6px;width:9em}
+#msg{color:var(--down)}
+#wrap{position:relative;flex:1;min-height:0}
+#chart{position:absolute;inset:0}
+#lg{position:absolute;top:8px;left:12px;z-index:3;pointer-events:none;font-variant-numeric:tabular-nums;display:flex;flex-wrap:wrap;gap:2px 12px}
+#lg .t{font-weight:700}.u{color:var(--up)}.d{color:var(--down)}
+#empty{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;background:var(--bg)}
+#empty h1{margin:0;font-size:20px}
+#empty p{margin:0;max-width:34em;color:var(--mut)}
+#empty .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span id="acc"></span>
+  <label id="curw" hidden><span id="curn"></span> current balance <input id="cur" type="number" step="any" placeholder="then press Enter"></label>
+  <span id="msg"></span>
+  <span class="sp"></span>
+  <button id="clr" hidden>Clear</button>
+  <button class="pick pri">Add file</button>
+  <input id="f" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv" multiple hidden>
+</div>
+<div id="wrap">
+  <div id="chart"></div>
+  <div id="lg"></div>
+  <div id="empty">
+    <h1>Your daily consolidated balance</h1>
+    <p>This page opens mydata.js from its own folder when it loads. You can also add one or more CSV, tab-separated or Excel (.xlsx) exports with the columns Transaction Date, Received amount, Withdrawal amount and Current Balance (other columns are ignored), or drop files anywhere on this page. Each file is one account, and the chart adds them into a single closing balance for every day. Files are read in this browser and never uploaded.</p>
+    <div class="row"><button class="pick pri">Add file</button></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="mydata.js"></script>
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const T={date:'Transaction Date',in:'Received amount',out:'Withdrawal amount',bal:'Current Balance'};
+const E0=[$('#empty h1').textContent,$('#empty p').textContent];
+let accts=[],pend=[],pts=[],idx=new Map(),dec=0;
+
+const chart=LightweightCharts.createChart($('#chart'),{autoSize:true,rightPriceScale:{scaleMargins:{top:.12,bottom:.27}},timeScale:{rightOffset:4}});
+const area=chart.addAreaSeries({lineWidth:2});
+const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+const volIn=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+chart.priceScale('vol').applyOptions({scaleMargins:{top:.8,bottom:0}});
+
+function theme(){const g=css('--grid');
+  chart.applyOptions({layout:{background:{type:'solid',color:css('--bg')},textColor:css('--fg'),fontFamily:'"Trebuchet MS",system-ui,sans-serif'},grid:{vertLines:{color:g},horzLines:{color:g}},rightPriceScale:{borderColor:g},timeScale:{borderColor:g},crosshair:{vertLine:{color:css('--mut')},horzLine:{color:css('--mut')}}});
+  area.applyOptions({lineColor:css('--acc'),topColor:css('--acc')+'55',bottomColor:css('--acc')+'00'});
+  vol.applyOptions({color:css('--down')+'88'});volIn.applyOptions({color:css('--up')+'88'});}
+theme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+new MutationObserver(theme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- parsing ---------- */
+function parseCSV(t){
+  const lines=t.split(/\r?\n/).filter(l=>l.trim()).slice(0,10).join('\n');
+  const d=[',','\t',';'].map(c=>[c,lines.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const rows=[];let r=[],c='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===d){r.push(c);c=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);c='';if(r.some(x=>x.trim()))rows.push(r);r=[]}
+    else c+=ch}
+  r.push(c);if(r.some(x=>x.trim()))rows.push(r);
+  return rows}
+function num(s){s=String(s??'').replace(/[\s¥￥$€£円]/g,'');if(!s)return NaN;
+  const neg=/^\(|^[-−▲△]|[-−]$/.test(s);
+  s=/,\d{1,2}$/.test(s)?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+  const v=parseFloat(s.replace(/[^\d.]/g,''));return neg?-v:v}
+function pd(s,dmy){s=String(s??'').trim();let m,y,mo,d;
+  if(m=s.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/)){y=+m[1];mo=+m[2];d=+m[3]}
+  else if(m=s.match(/^(\d{4})(\d{2})(\d{2})/)){y=+m[1];mo=+m[2];d=+m[3]}
+  else if(m=s.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/)){const a=+m[1],b=+m[2];y=+m[3];if(y<100)y+=2000;if(dmy){d=a;mo=b}else{mo=a;d=b}}
+  else return null;
+  if(mo<1||mo>12||d<1||d>31)return null;
+  return y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+
+/* Fill blank balances. On a day where some rows have no balance, the balance
+   printed that day is the day's closing balance; earlier rows are worked out
+   backwards from it. Days with no balance at all are carried from their
+   neighbours using the received/withdrawal amounts. */
+function fill(recs){
+  for(let i=0,j;i<recs.length;i=j){
+    for(j=i;j<recs.length&&recs[j].date===recs[i].date;j++);
+    const day=recs.slice(i,j);let k=day.length-1;while(k>=0&&isNaN(day[k].bal))k--;
+    if(k>=0&&day.some(r=>isNaN(r.bal))&&day.every(r=>!isNaN(r.amt))){
+      let b=day[k].bal;for(let n=day.length-1;n>=0;n--){day[n].bal=b;b-=day[n].amt}}}
+  for(let n=1;n<recs.length;n++)if(isNaN(recs[n].bal)&&!isNaN(recs[n-1].bal)&&!isNaN(recs[n].amt))recs[n].bal=recs[n-1].bal+recs[n].amt;
+  for(let n=recs.length-2;n>=0;n--)if(isNaN(recs[n].bal)&&!isNaN(recs[n+1].bal)&&!isNaN(recs[n+1].amt))recs[n].bal=recs[n+1].bal-recs[n+1].amt}
+
+/* One file -> one account: {name, open, days: date -> {close, rv, sp}} */
+function parse(rows,nm,cur){
+  const t=c=>String(c??'').trim();
+  const hi=rows.findIndex(r=>r.some(c=>t(c)===T.date)&&r.some(c=>t(c)===T.bal||t(c)===T.out||t(c)===T.in));
+  if(hi<0)return{err:`${nm}: no header row was found with the title Transaction Date and at least one of Received amount, Withdrawal amount or Current Balance. The titles must match exactly.`};
+  const hd=rows[hi].map(t),c={date:hd.indexOf(T.date),bal:hd.indexOf(T.bal),out:hd.indexOf(T.out),in:hd.indexOf(T.in)};
+  const body=rows.slice(hi+1);
+  const dmy=body.some(r=>/^\s*(1[3-9]|2\d|3[01])[\/.-]\d{1,2}[\/.-]\d{2,4}/.test(r[c.date]??''));
+  const recs=[];
+  for(const r of body){const date=pd(r[c.date],dmy);if(!date)continue;
+    const bal=c.bal>=0?num(r[c.bal]):NaN,o=c.out>=0?num(r[c.out]):NaN,i=c.in>=0?num(r[c.in]):NaN;
+    let amt=NaN;if(!isNaN(o)||!isNaN(i))amt=(isNaN(i)?0:Math.abs(i))-(isNaN(o)?0:Math.abs(o));
+    if(isNaN(bal)&&isNaN(amt))continue;recs.push({date,bal,amt})}
+  if(!recs.length)return{err:`${nm}: no rows have both a readable date and a balance or amount. Check the Transaction Date, Received amount, Withdrawal amount and Current Balance columns.`};
+  if(recs[0].date>recs[recs.length-1].date)recs.reverse();
+  recs.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  fill(recs);
+  if(recs.some(r=>isNaN(r.bal))){
+    if(recs.some(r=>isNaN(r.amt)))return{err:`${nm}: some rows have no balance and no amount. Check the Transaction Date, Received amount, Withdrawal amount and Current Balance columns.`};
+    if(isNaN(cur))return{need:1};
+    let b=cur;for(let i=recs.length-1;i>=0;i--){recs[i].bal=b;b-=recs[i].amt}}
+  recs.forEach(r=>r.bal=Math.round(r.bal*100)/100);
+  const open=isNaN(recs[0].amt)?recs[0].bal:recs[0].bal-recs[0].amt,days=new Map();let prev=open;
+  for(let i=0,j;i<recs.length;i=j){
+    for(j=i;j<recs.length&&recs[j].date===recs[i].date;j++);
+    const d=recs.slice(i,j),close=d[d.length-1].bal;let rv=0,sp=0;
+    if(d.every(r=>!isNaN(r.amt)))for(const r of d){if(r.amt>0)rv+=r.amt;else sp-=r.amt}
+    else{const n=close-prev;rv=Math.max(n,0);sp=Math.max(-n,0)}
+    days.set(recs[i].date,{close,rv,sp});prev=close}
+  return{acct:{name:nm,open,days,on:true}}}
+
+/* ---------- consolidate: one closing balance per calendar day ---------- */
+/* Days without transactions carry the previous close forward. Before an
+   account's first row it holds its opening balance. */
+function series(){
+  const a=accts.filter(x=>x.on);if(!a.length)return[];
+  let lo='9999-99-99',hi='0000-00-00';
+  for(const x of a)for(const k of x.days.keys()){if(k<lo)lo=k;if(k>hi)hi=k}
+  const out=[],cur=a.map(x=>x.open);
+  for(const d=new Date(lo+'T00:00:00Z');;d.setUTCDate(d.getUTCDate()+1)){
+    const k=d.toISOString().slice(0,10);let rv=0,sp=0;
+    a.forEach((x,i)=>{const v=x.days.get(k);if(v){cur[i]=v.close;rv+=v.rv;sp+=v.sp}});
+    out.push({time:k,value:Math.round(cur.reduce((s,v)=>s+v,0)*100)/100,rv:Math.round(rv*100)/100,sp:Math.round(sp*100)/100});
+    if(k>=hi)break}
+  return out}
+
+/* ---------- render ---------- */
+function render(){
+  pts=series();idx=new Map(pts.map((p,i)=>[p.time,i]));
+  dec=pts.every(p=>Number.isInteger(p.value)&&Number.isInteger(p.rv)&&Number.isInteger(p.sp))?0:2;
+  area.applyOptions({priceFormat:{type:'price',precision:dec,minMove:dec?.01:1}});
+  area.setData(pts.map(p=>({time:p.time,value:p.value})));
+  vol.setData(pts.filter(p=>p.sp>0).map(p=>({time:p.time,value:-p.sp})));
+  volIn.setData(pts.filter(p=>p.rv>0).map(p=>({time:p.time,value:p.rv})));
+  $('#empty').hidden=!!accts.length;$('#clr').hidden=!accts.length;
+  $('#acc').innerHTML=accts.map((a,i)=>`<label><input type="checkbox" data-i="${i}"${a.on?' checked':''}> ${a.name.replace(/[<>&"]/g,'')}</label>`).join('');
+  chart.timeScale().fitContent();lg(pts.length-1)}
+
+function lg(i){
+  const p=pts[i];if(!p){$('#lg').innerHTML='';return}
+  const f=n=>n.toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  const ch=i?p.value-pts[i-1].value:0,pc=i&&pts[i-1].value?ch/Math.abs(pts[i-1].value)*100:0;
+  $('#lg').innerHTML=`<span class="t">${p.time}</span><span>${f(p.value)}</span><span class="${ch>=0?'u':'d'}">${ch>=0?'+':''}${f(ch)} (${pc.toFixed(2)}%)</span><span class="u">Received ${f(p.rv)}</span><span class="d">Withdrawn ${f(p.sp)}</span>`}
+const tkey=t=>typeof t==='string'?t:t.year+'-'+String(t.month).padStart(2,'0')+'-'+String(t.day).padStart(2,'0');
+chart.subscribeCrosshairMove(p=>{const i=p.time?idx.get(tkey(p.time)):undefined;lg(i===undefined?pts.length-1:i)});
+
+/* ---------- loading ---------- */
+function show(msg){
+  if(accts.length){$('#msg').textContent=msg;return}
+  $('#empty h1').textContent='Nothing to chart yet';$('#empty p').textContent=msg;$('#empty').hidden=false}
+function add(rows,nm,cur){
+  const r=parse(rows,nm,cur);$('#msg').textContent='';
+  if(r.need){pend.push({rows,nm});ask();return}
+  if(r.err){show(r.err);return}
+  $('#empty h1').textContent=E0[0];$('#empty p').textContent=E0[1];
+  accts=accts.filter(a=>a.name!==nm).concat(r.acct);render()}
+function ask(){const p=pend[0];if(!p){$('#curw').hidden=true;return}
+  $('#curn').textContent=p.nm;$('#cur').value='';$('#curw').hidden=false;
+  show(`${p.nm} has no balance column. Enter its current balance and press Enter, and the chart will work backwards from it.`)}
+$('#cur').onchange=function(){const v=parseFloat(this.value),p=pend[0];if(!p||isNaN(v))return;
+  pend.shift();add(p.rows,p.nm,v);ask()};
+$('#acc').onchange=e=>{const i=e.target.dataset.i;if(i!=null){accts[i].on=e.target.checked;render()}};
+$('#clr').onclick=()=>{accts=[];pend=[];$('#curw').hidden=true;$('#msg').textContent='';
+  $('#empty h1').textContent=E0[0];$('#empty p').textContent=E0[1];render()};
+
+function xlsxSheets(buf){
+  const wb=XLSX.read(buf,{type:'array',cellNF:true});
+  return wb.SheetNames.map(sn=>({sn,rows:sheetRows(wb.Sheets[sn])}))}
+function sheetRows(ws){
+  const rows=[];
+  if(!ws||!ws['!ref'])return rows;
+  const rg=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=rg.s.r;R<=rg.e.r;R++){const row=[];
+    for(let C=rg.s.c;C<=rg.e.c;C++){const c=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(!c||c.v==null)row.push('');
+      else if(c.t==='n'&&c.z&&XLSX.SSF.is_date(c.z)){const p=XLSX.SSF.parse_date_code(c.v);row.push(p.y+'-'+p.m+'-'+p.d)}
+      else row.push(String(c.v))}
+    rows.push(row)}
+  return rows}
+async function readFile(file){const buf=await file.arrayBuffer(),nm=file.name.replace(/\.\w+$/,'');let t;
+  if(/\.xlsx?$/i.test(file.name)){
+    if(typeof XLSX==='undefined'){show('The Excel reader could not load. Check your internet connection and reload the page.');return}
+    try{const sh=xlsxSheets(buf),ok=sh.filter(x=>x.rows.some(r=>r.some(c=>String(c??'').trim()===T.date)));
+      if(!ok.length)add(sh[0]?sh[0].rows:[],nm);
+      else for(const x of ok)add(x.rows,ok.length>1?nm+' - '+x.sn:nm)}catch{show(`${nm}: this Excel file could not be read. Try saving it again as .xlsx or .csv.`)}
+    return}
+  try{t=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch{t=new TextDecoder('shift_jis').decode(buf)}
+  add(parseCSV(t.replace(/^\uFEFF/,'')),nm)}
+async function readFiles(fl){for(const f of fl)await readFile(f)}
+$$('.pick').forEach(b=>b.onclick=()=>$('#f').click());
+$('#f').onchange=e=>{readFiles([...e.target.files]);e.target.value=''};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();readFiles([...e.dataTransfer.files])});
+
+if(typeof MYCSV!=='undefined')add(parseCSV(MYCSV),'mydata');
+</script>
+</body>
+</html>
