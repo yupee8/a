@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balance chart</title>
+<style>
+:root{--bg:#ffffff;--panel:#f0f3fa;--fg:#131722;--mut:#787b86;--grid:#e0e3eb;--up:#089981;--down:#f23645;--acc:#2962ff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131722;--panel:#1e222d;--fg:#d1d4dc;--mut:#787b86;--grid:#2a2e39;--up:#26a69a;--down:#ef5350;--acc:#2962ff}}
+:root[data-theme="dark"]{--bg:#131722;--panel:#1e222d;--fg:#d1d4dc;--mut:#787b86;--grid:#2a2e39;--up:#26a69a;--down:#ef5350;--acc:#2962ff}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:13px/1.4 "Trebuchet MS",system-ui,sans-serif}
+[hidden]{display:none!important}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;border-bottom:1px solid var(--grid)}
+.sp{flex:1}
+button{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--grid);border-radius:4px;padding:5px 10px;cursor:pointer}
+button:hover{background:var(--panel)}
+button.on,button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.seg{display:inline-flex}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:4px 0 0 4px;margin-left:0}
+.seg button:last-child{border-radius:0 4px 4px 0}
+label{color:var(--mut)}
+select,input[type=number]{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--grid);border-radius:4px;padding:4px 6px;max-width:11em}
+input[type=number]{width:9em}
+#wrap{position:relative;flex:1;min-height:0}
+#chart{position:absolute;inset:0}
+#lg{position:absolute;top:8px;left:12px;z-index:3;pointer-events:none;font-variant-numeric:tabular-nums;display:flex;flex-wrap:wrap;gap:2px 12px}
+#lg .t{font-weight:700}.u{color:var(--up)}.d{color:var(--down)}.m{color:var(--mut)}
+#empty{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;background:var(--bg)}
+#empty h1{margin:0;font-size:20px}
+#empty p{margin:0;max-width:34em;color:var(--mut)}
+#empty .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="seg" role="group" aria-label="Chart type"><button data-type="area">Area</button><button data-type="candle">Candles</button></span>
+  <span class="seg" role="group" aria-label="Timeframe"><button data-tf="D">Day</button><button data-tf="W">Week</button><button data-tf="M">Month</button></span>
+  <label id="curw" hidden>Current balance <input id="cur" type="number" step="any"></label>
+  <span class="sp"></span>
+  <button class="pick pri">Open file</button>
+  <input id="f" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv" hidden>
+</div>
+<div id="wrap">
+  <div id="chart"></div>
+  <div id="lg"></div>
+  <div id="empty">
+    <h1>See your balance like a price chart</h1>
+    <p>This page opens mydata.js from its own folder when it loads. You can also open a CSV, tab-separated or Excel (.xlsx) export with the columns Transaction Date, Received amount, Withdrawal amount and Current Balance (other columns are ignored), or drop a file anywhere on this page. Files are read in this browser and never uploaded.</p>
+    <div class="row"><button class="pick pri">Open file</button></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="mydata.js"></script>
+<script>
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const T={date:'Transaction Date',in:'Received amount',out:'Withdrawal amount',bal:'Current Balance'};
+let table,cols,name='',type='candle',tf='D',bars=[],dec=0,dmy=false;
+
+const chart=LightweightCharts.createChart($('#chart'),{autoSize:true,rightPriceScale:{scaleMargins:{top:.12,bottom:.27}},timeScale:{rightOffset:4}});
+const area=chart.addAreaSeries({lineWidth:2});
+const candle=chart.addCandlestickSeries();
+const vol=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+const volIn=chart.addHistogramSeries({priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+chart.priceScale('vol').applyOptions({scaleMargins:{top:.8,bottom:0}});
+
+function theme(){const g=css('--grid');
+  chart.applyOptions({layout:{background:{type:'solid',color:css('--bg')},textColor:css('--fg'),fontFamily:'"Trebuchet MS",system-ui,sans-serif'},grid:{vertLines:{color:g},horzLines:{color:g}},rightPriceScale:{borderColor:g},timeScale:{borderColor:g},crosshair:{vertLine:{color:css('--mut')},horzLine:{color:css('--mut')}}});
+  candle.applyOptions({upColor:css('--up'),downColor:css('--down'),borderVisible:false,wickUpColor:css('--up'),wickDownColor:css('--down')});
+  area.applyOptions({lineColor:css('--acc'),topColor:css('--acc')+'55',bottomColor:css('--acc')+'00'});
+  vol.applyOptions({color:css('--down')+'88'});volIn.applyOptions({color:css('--up')+'88'});}
+theme();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+new MutationObserver(theme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- parsing ---------- */
+function parseCSV(t){
+  const lines=t.split(/\r?\n/).filter(l=>l.trim()).slice(0,10).join('\n');
+  const d=[',','\t',';'].map(c=>[c,lines.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0];
+  const rows=[];let r=[],c='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===d){r.push(c);c=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;r.push(c);c='';if(r.some(x=>x.trim()))rows.push(r);r=[]}
+    else c+=ch}
+  r.push(c);if(r.some(x=>x.trim()))rows.push(r);
+  return rows}
+function num(s){s=String(s??'').replace(/[\s¥￥$€£円]/g,'');if(!s)return NaN;
+  const neg=/^\(|^[-−▲△]|[-−]$/.test(s);
+  s=/,\d{1,2}$/.test(s)?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+  const v=parseFloat(s.replace(/[^\d.]/g,''));return neg?-v:v}
+function pd(s){s=String(s??'').trim();let m,y,mo,d;
+  if(m=s.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/)){y=+m[1];mo=+m[2];d=+m[3]}
+  else if(m=s.match(/^(\d{4})(\d{2})(\d{2})/)){y=+m[1];mo=+m[2];d=+m[3]}
+  else if(m=s.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/)){const a=+m[1],b=+m[2];y=+m[3];if(y<100)y+=2000;if(dmy){d=a;mo=b}else{mo=a;d=b}}
+  else return null;
+  if(mo<1||mo>12||d<1||d>31)return null;
+  return y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function wk(d){const t=new Date(d+'T00:00:00Z');t.setUTCDate(t.getUTCDate()-(t.getUTCDay()+6)%7);return t.toISOString().slice(0,10)}
+
+/* Fill blank balances. On a day where some rows have no balance, the balance
+   printed that day is the day's closing balance; earlier rows are worked out
+   backwards from it. Days with no balance at all are carried from their
+   neighbours using the received/withdrawal amounts. */
+function fill(recs){
+  for(let i=0,j;i<recs.length;i=j){
+    for(j=i;j<recs.length&&recs[j].date===recs[i].date;j++);
+    const day=recs.slice(i,j);let k=day.length-1;while(k>=0&&isNaN(day[k].bal))k--;
+    if(k>=0&&day.some(r=>isNaN(r.bal))&&day.every(r=>!isNaN(r.amt))){
+      let b=day[k].bal;for(let n=day.length-1;n>=0;n--){day[n].bal=b;b-=day[n].amt}}}
+  for(let n=1;n<recs.length;n++)if(isNaN(recs[n].bal)&&!isNaN(recs[n-1].bal)&&!isNaN(recs[n].amt))recs[n].bal=recs[n-1].bal+recs[n].amt;
+  for(let n=recs.length-2;n>=0;n--)if(isNaN(recs[n].bal)&&!isNaN(recs[n+1].bal)&&!isNaN(recs[n+1].amt))recs[n].bal=recs[n+1].bal-recs[n+1].amt}
+
+/* ---------- load / build ---------- */
+function show(msg){$('#empty h1').textContent='Nothing to chart yet';$('#empty p').textContent=msg;$('#empty').hidden=false}
+function load(rows,nm){
+  name=nm;const t=c=>String(c??'').trim();
+  const hi=rows.findIndex(r=>r.some(c=>t(c)===T.date)&&r.some(c=>t(c)===T.bal||t(c)===T.out||t(c)===T.in));
+  if(hi<0){show('No header row was found with the title Transaction Date and at least one of Received amount, Withdrawal amount or Current Balance. The titles must match exactly.');return}
+  table={rows,hi};const hd=rows[hi].map(t);
+  cols={date:hd.indexOf(T.date),bal:hd.indexOf(T.bal),amt:-1,out:hd.indexOf(T.out),in:hd.indexOf(T.in)};
+  build()}
+
+function build(){
+  const body=table.rows.slice(table.hi+1);
+  dmy=body.some(r=>/^\s*(1[3-9]|2\d|3[01])[\/.-]\d{1,2}[\/.-]\d{2,4}/.test(r[cols.date]??''));
+  let recs=[];
+  for(const r of body){const date=pd(r[cols.date]);if(!date)continue;
+    const bal=cols.bal>=0?num(r[cols.bal]):NaN;let amt=cols.amt>=0?num(r[cols.amt]):NaN;
+    if(isNaN(amt)&&(cols.out>=0||cols.in>=0)){const o=cols.out>=0?num(r[cols.out]):NaN,i=cols.in>=0?num(r[cols.in]):NaN;
+      if(!isNaN(o)||!isNaN(i))amt=(isNaN(i)?0:Math.abs(i))-(isNaN(o)?0:Math.abs(o))}
+    if(isNaN(bal)&&isNaN(amt))continue;recs.push({date,bal,amt})}
+  if(!recs.length){show('No rows have both a readable date and a balance or amount. Check the values in the Transaction Date, Received amount, Withdrawal amount and Current Balance columns.');return}
+  if(recs[0].date>recs[recs.length-1].date)recs.reverse();
+  recs.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  fill(recs);
+  const hasBal=recs.every(r=>!isNaN(r.bal));$('#curw').hidden=hasBal;
+  if(!hasBal){
+    if(recs.some(r=>isNaN(r.amt))){show('Some rows have no balance and no amount. Check the values in the Transaction Date, Received amount, Withdrawal amount and Current Balance columns.');return}
+    const cur=parseFloat($('#cur').value);
+    if(isNaN(cur)){show('This file has no balance column. Enter your current balance in the box above and the chart will work backwards from it.');return}
+    let b=cur;for(let i=recs.length-1;i>=0;i--){recs[i].bal=b;b-=recs[i].amt}}
+  recs.forEach(r=>r.bal=Math.round(r.bal*100)/100);
+  dec=recs.every(r=>Number.isInteger(r.bal))?0:2;
+  const open0=isNaN(recs[0].amt)?recs[0].bal:recs[0].bal-recs[0].amt;
+  const key=d=>tf==='D'?d:tf==='M'?d.slice(0,7)+'-01':wk(d);
+  bars=[];let prev=open0;
+  for(const r of recs){const k=key(r.date);let p=bars[bars.length-1];
+    if(!p||p.time!==k){p={time:k,open:prev,high:prev,low:prev,close:prev,spend:0,recv:0};bars.push(p)}
+    p.high=Math.max(p.high,r.bal);p.low=Math.min(p.low,r.bal);p.close=r.bal;
+    if(r.bal<prev)p.spend+=prev-r.bal;else p.recv+=r.bal-prev;prev=r.bal}
+  const pf={type:'price',precision:dec,minMove:dec?.01:1};area.applyOptions({priceFormat:pf});candle.applyOptions({priceFormat:pf});
+  $('#empty').hidden=true;render()}
+
+function render(){
+  if(!bars.length)return;
+  area.setData(type==='area'?bars.map(p=>({time:p.time,value:p.close})):[]);
+  candle.setData(type==='candle'?bars.map(({time,open,high,low,close})=>({time,open,high,low,close})):[]);
+  vol.setData(bars.filter(p=>p.spend>0).map(p=>({time:p.time,value:-p.spend})));
+  volIn.setData(bars.filter(p=>p.recv>0).map(p=>({time:p.time,value:p.recv})));
+  const l=bars[bars.length-1];chart.timeScale().fitContent();lg(l,l.recv,l.spend)}
+
+function lg(d,ri,sp){
+  const f=n=>n.toLocaleString(undefined,{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  let h=`<span class="t">${name.replace(/[<&]/g,'')}</span>`;
+  if('open' in d)h+=`<span class="${d.close>=d.open?'u':'d'}">O ${f(d.open)} H ${f(d.high)} L ${f(d.low)} C ${f(d.close)}</span>`;
+  else h+=`<span>${f(d.value)}</span>`;
+  $('#lg').innerHTML=h+`<span class="u">Received ${f(ri||0)}</span><span class="d">Withdrawn ${f(sp||0)}</span>`}
+chart.subscribeCrosshairMove(p=>{
+  if(!bars.length)return;const d=p.time&&p.seriesData.get(type==='candle'?candle:area);
+  if(!d){const l=bars[bars.length-1];lg(type==='candle'?l:{value:l.close},l.recv,l.spend);return}
+  lg(d,p.seriesData.get(volIn)?.value,Math.abs(p.seriesData.get(vol)?.value||0))});
+
+/* ---------- controls ---------- */
+function sync(){$$('[data-type]').forEach(b=>{const on=b.dataset.type===type;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $$('[data-tf]').forEach(b=>{const on=b.dataset.tf===tf;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
+$$('[data-type]').forEach(b=>b.onclick=()=>{type=b.dataset.type;sync();render()});
+$$('[data-tf]').forEach(b=>b.onclick=()=>{tf=b.dataset.tf;sync();if(table)build()});
+$('#cur').oninput=()=>{if(table)build()};
+sync();
+
+function xlsxRows(buf){
+  const wb=XLSX.read(buf,{type:'array',cellNF:true}),ws=wb.Sheets[wb.SheetNames[0]],rows=[];
+  if(!ws||!ws['!ref'])return rows;
+  const rg=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=rg.s.r;R<=rg.e.r;R++){const row=[];
+    for(let C=rg.s.c;C<=rg.e.c;C++){const c=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(!c||c.v==null)row.push('');
+      else if(c.t==='n'&&c.z&&XLSX.SSF.is_date(c.z)){const p=XLSX.SSF.parse_date_code(c.v);row.push(p.y+'-'+p.m+'-'+p.d)}
+      else row.push(String(c.v))}
+    rows.push(row)}
+  return rows}
+async function readFile(file){if(!file)return;const buf=await file.arrayBuffer();let t;
+  if(/\.xlsx?$/i.test(file.name)){
+    if(typeof XLSX==='undefined'){show('The Excel reader could not load. Check your internet connection and reload the page.');return}
+    try{load(xlsxRows(buf),file.name.replace(/\.\w+$/,''))}catch{show('This Excel file could not be read. Try saving it again as .xlsx or .csv.')}
+    return}
+  try{t=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch{t=new TextDecoder('shift_jis').decode(buf)}
+  load(parseCSV(t.replace(/^\uFEFF/,'')),file.name.replace(/\.\w+$/,''))}
+$$('.pick').forEach(b=>b.onclick=()=>$('#f').click());
+$('#f').onchange=e=>{readFile(e.target.files[0]);e.target.value=''};
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();readFile(e.dataTransfer.files[0])});
+
+if(typeof MYCSV!=='undefined')load(parseCSV(MYCSV),'mydata');
+</script>
+</body>
+</html>
